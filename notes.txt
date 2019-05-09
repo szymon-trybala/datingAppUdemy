@@ -1,0 +1,128 @@
+.net core sdk (cli, to z vs2019 to co innego)
+node.js najnowsze lts, npm ważny
+vscode
+db browser for sqlite 
+postman
+
+baza danych -> orm (object relation mapping, obiekty c# tworzące się na podstawie danych z bazy) -> api (umożliwia dogadanie sie 
+orm ze spa) -> spa(angular) -> przeglądarka
+
+najprostsze możliwe przekazanie danych z bazy do przeglararki, potem stopniowa rozbudowa
+
+typ projektu .net core - asp net core web api żeby 3 warstwy były maksymalnie niezależne
+dodać -o lokalizacja -n nazwa
+
+Rozszerzenia do vscode:
+c# od ms
+c# extensions do szybkiego tworzenia klas 
+nuget package manager
+
+Projekt c# - Program.cs = main i CreateWebHostServer (tworzy Kestrel web server)
+	Startup.cs = konfiguracja web servera - env (developer environment czy PRODUKCJA, to drugie daje hsts czyli powiazanie z https)
+	PÓKI CO zakomentować to z https, do tego dodaje do web servera mvc framework który przekierowuje requesty do odpowiedniego
+	kontrolera
+	value controller - przekierowanie do odpowiedniego kontrolera odbywa sie przez 
+
+	ctrl + slash = komentowanie linii
+
+	Dotarcie do strony którą obsługuje ten kontroler:  http://localhost:5000/api/values
+    	localhost bo serwer jest tam gdzie klient, 5000 bo to port kestrela, api bo route linijka nizej, values bo bierze 
+        pod uwage slowo przed slowem "controller"
+
+	bloki z httpGet, HttpPut, HttpPost uruchamiają ten blok dla konkretnych requestów http o tych nazwach.
+
+launchSettings.json - konfiguracja serwera kestrel, ustalanie portow itd
+Ctrl+tylda = terminal, dotnet run
+Domyślnie nie będzie działać bo trzeba otworzyć /api/values żeby serwer przetworzył jakieś żądanie
+
+Konfiguracja typu debugowania itd - appsetings.json, appsetingsDevelopment.json
+Zmiana trybu: launchSettings.json - ASPNETCORE_ENVIRONMENT
+dotnet watch run - uruchamia serwer i restartuje go przy zmianach kodu
+
+Tworzenie modelu, czyli klasy która przechowuje dane z bazy (Value.cs) - na początku bardzo prosty
+prop + tab = autogenerowanie klasy
+Entity Framework = łączenie modelu (entity, w tym wypadku klasa Value) z bazą - stworzenie klasy (DataContext.cs)
+która to zrobi - nowa klasa dziedziczy po klasie DbContext
+Ctrl+kropka = autosugestie!
+ctor + tab = autogenerowanie konstruktora
+Konstruktor musi mieć jako argument klasę DbContextOptions<DataContext> : base (options)
+DataContext powinno zawierać klase DbSet<Value> która przetwarza zapytania linq na zapytania do bazy i tworzy bazę. 
+Value to wcześniej utworzony model (entity). Nazwa obiektu to nazwa tabeli w bazie
+
+Poinformowanie api o nowej bazie i klasie value - w Startup.cs w metodzie ConfigureServices dodajemy service adddbcontext,
+w <> dodajemy nazwę klasy datacontext i przekazujemy w opcjach przez wyr lambda typ bazy, tutaj sqlite
+Zainstalować sqlite - jeśli jest addon nuget - ctrl+shift+p, -> nuget add package -> Microsoft.EntityFrameworkCore.Sqlite
+Connection string dodaje się w appsetings.json - dzięki temu można go wywołać w dowolnym miejscu i zawsze bedzie dostepny, nawet w 
+developement mode, bo json developementa nadpisuje zwykly, jesli w zwyklym bedzie rzecz ktorej nie ma w develoepement to jej nie nadpisze
+ "ConnectionStrings": {
+    "DefaultConnection": "Data Source=DatingApp.db"
+  },
+wewnatrz 1 nawiasu wasatego w appsettings.json
+dostanie sie do tego z c#: Startup.cs - Configuration.GetConnectionString("DefaultConnection") - znajduje sekcje o nazwie DefaultConnection
+
+Tworzenie bazy: dotnet ef migrations add InitialCreate - to sprawdzi nasze dbcontext (które zawierają info o values), sprawdzi gdzie
+chcemy zapisać bazę (Startup.cs - AddDbContext), wykryje które pole klasy to Id i da je jako primary key itd.
+Migration tworzy PLAN przetworzenia danych z kodu do prawdziwej bazy danych
+dotnet ef database update - aktualizuje plik z danych migracji (albo go tworzy jesli go nie ma)
+Otworzyc baze przez Db Browser for SQLite i dodac kilka rekordow
+
+ctrl+p = go to file
+Powiązanie bazy z metodą httpget - wstrzyknięcie datacontext do metody przez utworzenie w klasie valuescontroller i prywatne pole
+z DataContext
+Potem w httpget zmiana na IActionResult i wewnątrz stworzenie zmiennej do której wrzuca się _context.Values.ToList() (DataContext
+zawiera wszystkie potrzebne metody). Potem zwrócić klientowi wewnatrz response Ok (czyli Ok(values))
+HttpGet("{id}") podobnie, tylko w metodzie GetValue przekazac int id, a potem zeby sprwadzic ktora to zmienna uzyc wyrazenia lambda
+var value = _context.Values.FirstOrDefault(x => x.Id == id);
+
+Otworzyc postmana, sprawdzic czy wszystko jest ok "http://localhost:5000/api/values", można dodać potem "/3" itd, jesli przekroczymy
+ilosc rekordow w bazie to zwroci pusta strone i status 204 no context bo uzylismy metody FirstOrDefault zeby nie wywaliło wyjątku
+
+Http requesty asynchronicznie: zmienic metode ktora uruchamia request na async Task<IActionResult>. Teraz metoda bedzie zwracac 
+asynchroniczne zadanie. Przy miejscu które może trwać dużo czasu i chcemy żeby nie blokowało całego programu dodajemy await,
+dodatkowo trzeba zmienic metode przy await na asynchroniczna (ToListAsync). Każdy request powinien być async
+
+Zainstalować angular cli przez npm, użyłem wersji 6.2.9 lts, stworzyć projekt przez ng new DatingApp-SPA
+
+Użyte moduły i ich wersje są opisane w package.json, główny folder aplikacji Angulara to src/app. Angular ma komponenty, czyli coś
+w rodzaju klas z powiązaniami. Domyślnie w pliku index.html uruchamiany jest komponent z selectorem "app-root", czyli ten w 
+domyślnym pliku app.component.ts. app.module.ts to plik z modułem, czyli czymś co ładuje poszczególne komponenty.
+Moduł jest ładowany bezpośrednio w pliku main.ts. w nim jeszcze jest info że aplikacja jest pod przeglądarkę (platformBrowserDynamic)
+i że chcemy uzywac bootstrapa w module (bootstrapModule(AppModule)), co włacza tez bootstrapa na każdy komponent uruchamiany przez moduł
+main.ts jest uruchamiany mimo że w index.html nie ma zadnej informacji o nim dzieki webpackowi w angularze, ktory pakuje wszystko do js
+i wstrzykuje do htmla w trakcie kompilacji (?).
+Uruchomic projekt angulara (ng serve), bedzie sluchac na porcie 4200
+
+Dodac kilka rozszerzen do vscode dla angulara: Angular v7 Snippets, Angular Files do szybkiego tworzenia plkikow, ANgular Language 
+Service (goto definition), Angular2-switcher do szybkiego przełączania pomiedzy plikami ts, html i css, auto rename tag, bracket pair
+colorizer, debugger for chrome, path intellisense, prettier do autoformatu, tslint do podkreślania.
+
+Tworzenie http requestów w angularze: stworzyć komponent (ppm i create component, value wtedy zrobi folder z wszystkimi potrzebnymi
+plikami). Dodało też w pliku app.module informacje że korzystamy z komponentu value. 
+Klasy do requestów są w pliku angular/common/http, trzeba zaimportować je w app.module.ts. Potem w value.component.ts 
+tworzymy pole values:any, które będą przechowywać dane z serwera aspnet i metodę getValues, która korzysta z httpclienta angulara
+i robi request na localhost:500/api/values, a potem subskrybuje, czyli zapisuje odpowiedź do values: 
+getValues() {
+    this.http.get('http://localhost:5000/api/values').subscribe(response => {
+      this.values = response;
+    }, error => {
+      console.log(error);
+    });
+Dodać jeszcze wywołanie metody getValues w ngOnInit, czyli metodzie wywołującej się po załadowaniu komponentu
+Alt+O = przejście do http danego komponentu, Alt+U = przejście do ts danego komponentu
+W stronie tytułowej angulara (app.component.html) dodać znacznik <app-value>, który uruchomi komponent value (nie będzie go widać na stronie
+bo nie ma backendu, ale można go zobaczyć w konsoli). W konsoli jest info o Access-Control-Allow-Origin blocked blabla, trzeba to poprawic i dodac cors
+
+CORS pozwala na ustalenie którzy klienci mogą mieć dostęp do naszego api (np wywołanie localhost:5000 z localhost:4200). Zeby to zrobic
+najpierw w metodzie configureServies trzeba dodać Cors (services.AddCors()), a potem go ustalić na co ma pozwalać (w metodzie configure
+dodać app.UseCors(x => x.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());, to pozwala na wszystko wszystkim, później to się zmieni
+
+Wyświetlenie wartości na stronie, a nie w konsoli chroma: w value.component.html przy znaczniku p dodać pętlę angulara która pozwala na wrzucanie elementow na strone:
+<p *ngFor="let value of values">
+  {{value.id}}, {{value.name}}
+</p>
+values to var do którego przesyłane są dane z api, mozna sie dostac do poszczegolnych id i name, sukces XD
+
+Bootstrap i FontAwesome: npm install bootstrap font-awesome
+potem w głównym pliku css zaimportować bootstrap.min.css a potem font-awesome.min.css, potem w htmlu componenta można usunąć znacznik style
+
+git:
