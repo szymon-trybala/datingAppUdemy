@@ -125,4 +125,48 @@ values to var do którego przesyłane są dane z api, mozna sie dostac do poszcz
 Bootstrap i FontAwesome: npm install bootstrap font-awesome
 potem w głównym pliku css zaimportować bootstrap.min.css a potem font-awesome.min.css, potem w htmlu componenta można usunąć znacznik style
 
-git:
+git: wywalic .git z spa, dodac gitignore dla api, zrobic git init w głównym folerze aplikacji, stworzyć repo na githubie, zrobić remote
+add origin [adres], potem pierwszy commit i push to 
+
+dodanie modelu usera: stworzyc klase z id, loginem, hashem hasla i solą (oba to byte[]), dodac info o tej klasie w datacontext, zrobic kolejna
+migracje, potem dac dotnet ef database update
+
+Repository interface - kolejna warstwa abstrakcji ktora jest interfejsem. Zawiera szkielet wszystkich metod ktore beda potrzebne api do 
+wykonania jego metod, i kazda klasa ktora bedzie pobierac dane z bazy musi implementowac ten interfejs, dzieki czemu api bedzie po czesci 
+niezalezne od frameworków.
+
+Stworzenie interfejsu: w folderze data stworzyc interfejs IAuthRepository, zrobic 3 taski (metody async), login ktory przyjmuje nazwe usera, 
+haslo a zwraca obiekt user (w jaki sposob ten user zostanie stworzony to juz kwestia konkretnego AuthRepository), register który zwraca usera
+i przyjmuje usera i password, i UserExists ktory przyjmuje string username a zwraca boola. 
+
+Rejestracja - najpierw tworzymy klase AuthRepository ktora implementuje interfejs IAuthRepository, w konstruktorze będzie DataContext dzięki
+któremu bedzie mozna przesylac dane do bazy przez ef, potem tworzymy tymczasowe zmienne dla hashu i soli danego usera, potem funkcję do generowania 
+hasha ktora przyjmuje haslo podane w metodzie Register i tymczasowe zmienne hashu i soli jako referencje (out). Ta funkcja implementuje 
+interfejs IDisposable, czyli po jej wykonaniu wszystko zostaje wrzucone do garbage collectora, wiec trzeba stworzyc blok 
+using(var hmac = new HMACSHA512). w nim wyciagamy  hmac.Key (czyli sol wygenerowana przy stworzeniu obiektu hmac) jako passwordSalt, i 
+uzywamy metody ComputeHash z haslem usera jako argumentem i wrzucamy do passwordHash. Potem powrot do metody Register, 
+tam przypisujemy naszemu userowi sol i haslo = temp soli i hasle, potem uzywamy  naszego _context.Users.AddAsync(user) 
+i _context.SaveChangesAsync(), zwracamy usera.
+
+Logowanie - podobnie, stworzyc zmienna przechowujaca usera (var user = await _context.Users.FirstOrDefaultAsync(x => x.Username == username);) ktora
+wyszukuje go w bazie, potem sprawdzic czy znalazlo, potem uruchomic i stworzyc metode ktora w podobny sposob co wyzej sprawdza czy hash sie zgadza 
+przy konstruktorze hmac wrzucic sol z obiektu user, potem jesli sprawdzanie == false zwrocic nulla, jesli true zwrocic usera
+
+Dodawanie authrepo do konfiguracji api - w funkcji ConfigureServices.AddScoped<IAuthRepository, AuthRepository>(); ta metoda tworzy repozytorium
+za każdym razem kiedy nadchodzi request od klienta (czyli np się łączy, czyli jedna instancja na połączenie klienta)
+
+Stworzenie AuthControllera - tu dużo rzeczy jest tymczasowe - stworzyc klase AuthController dziedziczaca po ControllerBase. W konstruktorze 
+ma przyjmowac IAuthRepository które będzie zajmowac sie rejestracja i logowaniem od strony bazy, stworzyc async funkcje Register z TYMCZASOWO
+string username i string password (potem to bedzie zserializowany json). Na poczatku kiedys bedzie validate request, potem trzeba zmienic username
+na lowercase, sprawdzic czy taki user juz istnieje korzystajac z _repo, jesli nie zwrocic BadRequest, jesli nie istnieje stworzyc nowy obiekt User,
+nadac mu user.Username = username, potem znowu wywolac funkcje Register z _repo, podajac usera i haslo. Na koncu TYMCZASOWO zwrocic statuscode(201)
+
+DTO wstęp: dto to obiekt json ktory bedzie przesylany z angulara do api i bedzie zawierac dane usera. W api stworzyc folder dtos i klase UserForRegisterDto
+z polem Username i Password. Potem w AuthController pozmieniac metode register tak zeby przyjmowala obiekt UserForRegisterDto a nie osobne pola.
+Na samym poczatku metody register dodac punkt pauzy debuggera, stworzyc nowa konfiguracje debuggera, .NET Core, przy procesie do zaczepienia
+wpisac "api" i dolaczyc do dotnet.exe ktory jest w folderze z api, potem wejsc do postmana, zrobic requesta post dla localhost:5000/api/auth/register,
+w body dac raw i zmienic zawartosc na jsona , w nim dac { "username": "John", "password": "password" }, dzieki temu bedzie mozna sprawdzic czy 
+metody do rejestracji dzialaja bez stworzenia frontendu do rejestracji. Po wyslaniu requesta debugger powinien zatrzymac kod i pokazac co sie
+dzieje - rejestracja powinna pojsc ok, mozna potem sprawdzic w przegladarce sqlite. powinno zwrocic 201 created, przy drugim post dla takiego samego
+hasla i username juz powinien zwrocic 400 bad request, przy pustym username i password powinno wciaz utworzyc, w kolejnym kroku poprawi sie to 
+dzieki walidacji.
