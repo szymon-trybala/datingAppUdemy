@@ -170,3 +170,28 @@ metody do rejestracji dzialaja bez stworzenia frontendu do rejestracji. Po wysla
 dzieje - rejestracja powinna pojsc ok, mozna potem sprawdzic w przegladarce sqlite. powinno zwrocic 201 created, przy drugim post dla takiego samego
 hasla i username juz powinien zwrocic 400 bad request, przy pustym username i password powinno wciaz utworzyc, w kolejnym kroku poprawi sie to 
 dzieki walidacji.
+
+Validation requests w api: walidacja musi byc w miejscu gdzie są same dane wysłane przez usera, czyli login i hasło jako string, czyli UserForRegisterDto.
+Nad deklaracja pola wystarczy dodać znaczek [Required], wtedy nie przejdzie empty string. przy haśle trzeba dodac Required i można dodać dodatkowe wymagania,
+np StringLenhth od 4 do 8. Teraz w postmanie przy probie zarejestowania pustego usera wyskoczy error 400, dzieki temu ze AuthController ma atrybut [ApiController]
+Po zakomentowaniu atrybutu po próbie zarejestrowania sie z empty stringami wyskoczy internal server 500, a konkretnie nullreferenceexception. Okazuje sie ze
+username jest teraz nullem i konwersja na lowercase wywala wyjątek (można sprawdzic debuggerem). Gdyby [ApiController] nie bylo zakomentowane api "wywnioskowaloby"
+że UserForRegisterDto pochodzi z strony i nie moze byc nullem. Mozna tez to osiagnac dodajac atrybut [FromBody] przed nazwa klasy (UserForRegisterDto) w metodzie Register
+Bez ApiController trzeba zrobic walidacje (if (!modelState.IsValid) return BadRequest(ModelState);), wtedy dostaniemy juz bad request 400. Jednak najlepszą opcją
+jest dodanie ApiController i usuniecie FromBody i walidacji przez ModelState.
+
+Token authentication - zawiera 3 części - header z ingo o rodzaju szyfrowania i typie struktury (JWT, json web token), payload, czyli czesc przechowujaca informacje
+np id, name. oprocz tego zawiera info tokenu, czyli date wygenerowania, date wygasniecia i date wejscia do uzycia. Te dwie czesci moga byc odczytane przez kazdego!
+Ostatnia czesc to signature, czyli czesc ktora autoryzuje token. Tworzy sie go szyfrujac header i payload tokenu przy uzyciu sekretu jako soli (?). Sekret
+jest trzymany na serwerze. Logowanie bedzie dzialalo tak że klient wysyla login i haslo, serwer odsyla token ktory klient zapisuje, a do kazdego kolejnego żądania 
+klienta dołączany będzie token który potwierdza że user jest ok.
+
+Tworzenie metody logowania: stworzyc UserForLoginDto ktore bedzie takie samo jak UserForRegisterDto ale bez obostrzeń, można przesłać wszystko, nawet puste. W AuthController
+stworzyć metode login przyjmujaca UserForLoginDto. Najpierw musi sprawdzac czy taki user istnieje, korzystajac z _repo.Login i jesli userFromRepo bedzie nullem zwrocic
+Unauthorized. Teraz celem funkcji jest wygenerowanie i wyslanie tokenu. Wszystkie jego czesci generuje sie klasami ktore potem laczy sie w jedno SecurityTokenDescriptior. 
+Najpierw trzeba zrobić tablicę Claims zawierającą id i login, potem klucz. Klucz będzie trzymany w appsettings.json żeby mieć do niego dostęp z różnych części aplikacji,
+więc dodajemy "AppSettings": { "Token": "dupa1234dupa1234" } (pamiętać że są dwa appsettings w zależności czy jesteśmy w trybie produkcyjnym czy deweloperskim), w konstruktorze
+naszego AuthController dodajemy IConfiguration i pole _config żeby mieć dostęp do appsetings, pobieramy klucz do zmiennej i konwertujemy na byte[], tworzymy obiekt 
+SigningCredentials podajac jako argumenty klucz i typ szyfrowania, potem tworzymy SecurityTokenDescriptior w ktorym Subject = claims, Expires = DataTime.Now.AddDays(cośtam) i 
+SigningCredentials = creds. Na końcu tworzymy obiekt ktory tworzy jwt (JwtSecurityTokenHandler), tworzymy token uzywajac jego metody CreateToken z arugmentem tokenDescriptor
+i zwracamy klientowi Ok(new {token = tokenHandler.WriteToken(token)})

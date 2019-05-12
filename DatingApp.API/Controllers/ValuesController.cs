@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using DatingApp.API.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,7 @@ namespace DatingApp.API.Controllers
     // Dotarcie do strony którą obsługuje ten kontroler:  http://localhost:5000/api/values
     // localhost bo serwer jest tam gdzie klient, 5000 bo to port kestrela, api bo route linijka nizej, values bo bierze 
     // pod uwage slowo przed slowem "controller"
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class ValuesController : ControllerBase
@@ -29,7 +31,7 @@ namespace DatingApp.API.Controllers
             return Ok(values);
         }
 
-        // http://localhost:5000/api/values uruchomi tą metodę!
+        [AllowAnonymous]
         [HttpGet("{id}")]
         public async Task<IActionResult> GetValue(int id)
         {
