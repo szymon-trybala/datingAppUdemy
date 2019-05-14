@@ -195,3 +195,79 @@ naszego AuthController dodajemy IConfiguration i pole _config żeby mieć dostę
 SigningCredentials podajac jako argumenty klucz i typ szyfrowania, potem tworzymy SecurityTokenDescriptior w ktorym Subject = claims, Expires = DataTime.Now.AddDays(cośtam) i 
 SigningCredentials = creds. Na końcu tworzymy obiekt ktory tworzy jwt (JwtSecurityTokenHandler), tworzymy token uzywajac jego metody CreateToken z arugmentem tokenDescriptor
 i zwracamy klientowi Ok(new {token = tokenHandler.WriteToken(token)})
+
+Zmuszenie innych kontrolerów do autoryzacji - testowo użyjemy ValuesController - przed klasą dać znacznik [Authorize], dzieki temu kazda metoda z kontrolera bedzie wymagala 
+logowania. Oczywiscie mozna zmusic jakas metode do zezwolenia na anonimowe logowanie, dajac przed metoda znacznik [AllowAnonymous]. Teraz trzeba poinformować api skąd ma brać
+secret, jaka jest konfiguracja autoryzacji itd. W metodzie startup.cs w metodzie ConfigureServices dodać services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).
+AddJwtBearer(options => {}). W wyr lambda przypisujemy TokenValidationParameters jako nowy obiekt TokenValidationParameters, i właśnie tam ustawiamy konkretne opcje. Pierwsza 
+właściwość to ValidateIssuerSigningKey = true, która zaznacza że potrzebny jest secret key, drugi parametr to właśnie ten klucz i ścieżka do niego, czyli IssuersSigningKey =
+new SymmetricSecurityKey(Configuration.GetSection(ścieżka do klucza w appsetings.json)), ostatnie to ValidateIssuer i ValidateAudience, oba na false, one służą do sprawdzenia
+wystawcy tokena i odbiorcy tokena podczas sprawdzania tokena, póki co wszystko robimy na localhost więc damy na false. Na koncu w metodzie Configure przed UseMvc uruchamiamy 
+app.UseAuthentication(). W postmanie przy metodzie get (!!!) na values/liczba powinno zwracac wartosc z bazy bo ustawilismy zeby pozwalalo anonimon, za to przy samo /api/values
+juz nie bedzie dzialac. Zeby sie dostac do values trzeba sie zalogowac, wtedy dostaniemy token w body json, kopiujemy go i dodajemy nowy header z key Authorization i z value
+Bearer tu_wstaw_token. Teraz values dziala.
+
+Tworzenie formy do logowania - wejsc na getbootstrap i skopiować kod html z jakiegoś example np jumbotron (wszystko w <nav>), to będzie szkic naszej formy. Teraz robimy nowy
+komponent "nav" w src/app (ppm/generate new component) i kopiujemy html z bootstrapa do nav.component.html Żeby aktywować nav w stronie głównej dołożyć do app.component.html 
+na samym początku <app-nav>. Teraz zmienić navbar-brand na Dating App, wywalić button navbar toggler bo ono korzysta z jquery a my nie chcemy jquery, wywalić navbar collapse
+Mają być 3 navlinki, Matches, Lists i Messages, wywalić navbar dropdown. Do tego dać 2 inputy dla loginu i hasła, zmienić submit na login i wywalić część "outline" w nazwie klasy.4
+Na koniec wywalić fixed top z samej góry, teraz header będzie poniżej navbara.
+
+Tworzenie formy do logownia - kazda forma html może byc zmieniona na forme angulara. Najpierw w nav.component robimy obiekt "model: any = {};", póki co pusty. Model będzie przetrzymywać
+username i password z htmla. Robimy jeszcze funkcje login(), w niej console.log(model), tymczasowo, żeby sprawdzić czy wszystko działa ok.Teraz wracamy do nav.html i musimy oznaczyc 
+ze forma html jest tez forma angulara, dodajac #loginForm="ngForm" w <>. Żeby aktywować ngForm w naszej apce  trzeba przejść do app.module i zaimportować: w sekcji imports dodac FormsModule, 
+na samej gorze dodać import {FormsModule} from '@angular/forms'. Teraz w nav.html dodać  przy deklaracji kontrolki username i password a-ngModel, dać tab i aktywuje sie snippet. 
+Zmienic binding na model.username, to samo dla hasla (model.password). Dla deklaracji  formy (nie przycisku submit) dodajemy ngSubmit)="login()", teraz klikniecie buttona 
+aktywuje metode login() z pliku .ts Do inputow dodac znacznik "required" i name, bez name angular nie powiaze inputu html z modelem. Sprawdzic czy dziala. Jesli sie zalogujemy
+z pustymi polami login i password wciaz bedzie proba logowania, mimo tego ze pola sa required, bo angular nie wie co zrobic jesli pola nie sa wypelnione. Zeby to zmienic dodac do
+buttona w htmlu [disabled]=!loginForm.valid. Angular caly czas sprawdza kiedy forma jest "valid" i udostepnia takie parametry. Teraz kiedy zaznaczylismy że oba pola sa required valid
+valid bedzie tylko wtedy kiedy w obu cos jest wpisane, parametr valid bedzie true, dzieki temu mozna wplywac na disabled.
+
+Angular Service - specjalny obiekt angulara który służy do przekazywania i zapisywania danych pomiędzy częściami aplikacji które o sobie nic nie wiedzą, w tym wypadku do komunikacji 
+a api. Dzięki niemu komponenty będą też odseparowane od siebie. W /src/app dodać folder _services i użyć ppm i wygenerować service auth (tylko plik .ts). @Injectable pozwala na 
+wstrzykiwanie. providedIn wskazuje w którym module ma działać service, root = app.module. Trzeba też dodać info o service w app.module.ts - w providers dodac AuthService, dać tab
+i vscode doda import. Teraz service może być wstrzykiwane do komponentów. W auth.service.ts dodać konstruktor z argumentem http: HttpClient (z angular/common/http, użyć tab).
+Dodać zmienną baseUrl ze ścieżką do api/auth, doodać metode login ktora bedzie przyjmowala model : any (z navbaru), i ktora zwraca  
+return this.http.post(this.baseUrl + 'login', model).pipe(
+      map((response: any) => {
+        const user = response;
+       if (user) {
+          localStorage.setItem('token', user.token);
+        }
+To powyżej wykonuje request http (post), przekazujac adres i cialo requestu czyli model z loginem i hasłem do logowania. Zajmujemy sie tez reakcja na http response, czyli plikiem json
+Przez rxjs mapujemy odpowiedź do bloku kodu który zapisuje ją do zmiennej user, a następnie zapisuje do localStorage część pliku json która jest czystym tokenem.
+Ten blok wykona się od razu po otrzymaniu odpowiedzi. Należy jeszcze zaimportować map z rxjs/operators
+
+Injecting service in component: w konstruktorze nav.component dodać authService: AuthService (tab). Teraz przy metodzie login można użyc requestu http: this.authService.login(this.model)
+(model to mode.username i model.password, zdefiniowane w pliku nav.component.html). Jako że service zwraca Observable, czyli czeka na odpowiedź od api, trzeba dodać 
+.subscribe(next => {
+      console.log('Logged in successfully!');
+    }, error => {
+      console.log('Failed to login!');
+    });
+Next to blok wykonywany jeśli subskrybowany Observable wykona się poprawnie, czyli jeśli dostaniemy odpowiedz od api. Error wykona sie jesli odpowiedzi nie dostaniemy. Sprawdzic czy dziala.
+Po wejsciu w zakladke Network debuggera widzimy 2 wartosci login, pierwsza to cos w rodzaju headera, drugi to wysylane dane, mozna je zobaczyc w zakladce Headers. W Response widac zwrotny
+plik json z tokenem ktory jest zapisywany do localStorage.
+
+Conditional rendering Angular components - pobieramy z getbootstrap.com/docs/components/dropdown kod html, ten z <a>. Do nav.component.html wklejamy blok z bootstrapa. Teraz kosmetyka,
+usunąć z dropdown-toggle btn i btn-secondary, zmienic nazwe na Welcome User, usunac wszystkie properties za id. Teraz usunac z wysuwanych linkow aria, zmienic nazwy na Edit Profile i Logout,
+srodkowa zmienic na <div class="dropdown-divider"> Do dropdown-itemow dodac ikony (<i class="fa fa-user" albo fa-sign-out), dodac do dropdown-toggle text-light. Dalej nie da sie rozwinac
+dropdown menu. 
+Teraz dodajemy metody do sprawdzania czy user jest zalogowany - loggedIn tworzy zmienna const token = localstorage.getItem('token'), a nastepnie jest linijka !!token - to skrot od 
+if(token != null) return true; else return false;, zapamiętać, ważne. Dodać też metode logout (localstorage.removeitem('token') + jakies info w konsoli). Teraz mozna wykoryzstac te metody w 
+htmlu - blok z dropdownem powinien byc dostepny tylko dla zalogowanych userow, dodajemy wiec przy jego deklaracji a-ngIf, tab, zmienic expression na "loggedIn()". Teraz blok dropdown wykona
+sie tylko wtedy jesli metoda z ngIf zwroci true. Blok z kontrolkami logowania (#loginForm) powinien byc za to rysowany jeśli user nie jest zalogowany, dodajemy wiec *ngIf="!loggedIn()" - teraz
+musi byc zwrocone false zeby wszystko zadzialalo. Sprawdzic czy dziala, poki co dropdowna nie da sie rozwinac. Dodajmy jeszcze jakis tymczasowy przycisk do wylogowania - dodac nav-link pod
+messages (Logout), dodac atrybut (click)="logout()", teraz po kliknieciu wykonuje sie funkcja logout, wszystko aktualizuje sie w czasie rzeczywistym bez odswiezania strony.
+
+Adding Register components - dodać dwa komponenty - home z częścią "reklamową" strony i "register" z częścią rejestracji. Kurs dostarcza plik html ktory zawiera ładny layout komponentu w 
+bootstrapie z dwoma zdaniami i dwoma przyciskami. Rzeczy bootstrapowe - mt-5 określa margines, mt=margin top, jest 6 opcji, czyli 5 to prawie najwiekszy odstep jaki da sie zrobic bootstrapem
+Div do wyswietlania formy z rejestracja ma dopisek "col-4", co znaczy ze rzeczy wewnatrz divu beda sie wyswietlaly na 4 z 12 kolumn. W glownym htmlu aplikacji (app.component.html) zamiast h1 
+dać <app-home>. Przy nazwie klasy buttonow dodac marginesy ("mr-2" albo "ml-2"). Do register.component.html tez wkleic szablon z kursu. W register.ts dodać model: any = {};, metody
+register() i cancel(), póki co tylko z console.log. Teraz mówimy angularowi że to jest formularz - w register.component przy znaczniku <form> dodać #registerForm="ngForm" (ngSubmit) = "register()"
+Przy polach username i password dodać znaczniki required, name="username" albo "password", snippet a-ngModel, tab i "model.username" albo "model.password". Przy buttonie cancel dodać (click)="cancel()"
+Wrocic do home.component.html i w kontenerze na dole (tym z 4/12 kolumn) dodać <app-register>. Teraz mamy jednoczesnie rejestracje i wstep, a chcemy miec tylko jedno z dwoch. Zeby to zmienic 
+wchodzimy do home.html i przy kontenerze z app-register dodajemy *ngIf="registerMode", a przy kontenerze z opisem (nie tym głównym bo inaczej zniknie wszystko, włącznie z rejestracją!) dodać 
+*ngIf="!registerMode". Dodać jeszcze (click)="registerToggle()" przy przycisku register. Teraz w .ts dodac registerMode = false (domyślnie będzie opis a nie rejestracja), i funkcje registerToggle()
+która zmienia registerMode = !registerMode. Teraz po kliknieciu na rejestracje opis znika, jednak nie da sie wrocic do trybu opisu. Dzieje sie to dlatego że przycisk cancel jest w app.register,
+a metoda zmieniajaca registerMode w app.home, i póki co jedno nie umie odwoływać się do drugiego. W następnej sekcji to będzie poprawione.
