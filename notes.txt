@@ -271,3 +271,29 @@ wchodzimy do home.html i przy kontenerze z app-register dodajemy *ngIf="register
 *ngIf="!registerMode". Dodać jeszcze (click)="registerToggle()" przy przycisku register. Teraz w .ts dodac registerMode = false (domyślnie będzie opis a nie rejestracja), i funkcje registerToggle()
 która zmienia registerMode = !registerMode. Teraz po kliknieciu na rejestracje opis znika, jednak nie da sie wrocic do trybu opisu. Dzieje sie to dlatego że przycisk cancel jest w app.register,
 a metoda zmieniajaca registerMode w app.home, i póki co jedno nie umie odwoływać się do drugiego. W następnej sekcji to będzie poprawione.
+
+Parent to child communication - bedziemy przekazywac wartosci z home.component do register.component . Na potrzeby przykladu musimy przeslac jakies dane, a w home takich nie ma, pobierzemy wiec je
+z api (te testowe wartosci z bazy danych) - na poczatek w ValuesController.cs w API przy metodzie [HttpGet("{id"})] i zwyklym HttpGet dodajemy znacznik [AllowAnonymous] żeby móc łatwo przesłać dane
+bez bawienia sie w tokeny (potem to sie usunie), Teraz values.controller powinien dzialac i pokazywac wartosci (wczesniej byl zaimplementowany w app.component, ale w konsoli byl blad 401 unauthorized)
+Teraz skopiowac do home.ts metode getValues z value.component i dodac w kontruktorze httpClient i prop values: any i w kontruktorze uruchomic metode getValues. Docelowo bedziemy chcieli zastapic value
+app.component, usuwamy wiec caly folder value i importy z value w app.module. Dodac w home.html <p> z ngFor let value of values a wewnatrz {{value.name}}, w app.html wywalic app-value. Sprawdzic czy
+dziala, usunąć <p>, była testowo żeby sprawdzic czy pobiera wartosci z serwera. Teraz chcemy przerzucic values z home do register. Robi sie to dodajac do deklaracji <app-register znacznik
+[valuesFromHome]="values". To pierwsze to nazwa prop wewnatrz register.ts, a to drugie to nazwa propa wewnatrz home.ts. W register.ts dodajemy linijke @Input() valuesFromHome: any;, dziala jak zwykla 
+deklaracja zmiennej ale ze znacznikiem ze jest z inputu. Teraz zeby sprawdzic czy dziala to w praktyce dodajemy w register.html div form-group, wewnatrz niego label z info i select form-control a w 
+nim option z ngFor value of valuesFromHome [value]="value">{{value.name}}. Teraz w stronie powinien byc selector z nazwami values.
+
+Child to parent comunication - tu zrobimy cos co rzeczywiscie przyda sie w aplikacji, przycisk cancel w register.component zmieni wartosc home.component i w efekcie usunie część html z rejestracja i
+przywroci tą ze wstępem. Do register.ts dodać @Output() cancelRegister = new EventEmitter(); (emitter z angular/core). Przekazywanie do rodzica dziala na zasadzie emitowania eventów, których nasłuchuje
+rodzic. Event może zawierać dowolny obiekt. Teraz dodajemy do metody cancel() this.cancelRegister.emit(false). W ten sposób emitujemy wczesniej utworzony Event zawierając w nim boolean false, które 
+przyjmie rodzic i zmieni za jego pomocą registerMode, który wczesniej ustawilismy tez na boolean. W home.html przy deklaracji app-register dodajemy znacznik (cancelRegister)="cancelRegisterMode($event)"
+To pierwsze jest znacznikiem eventu (?), mało ważne, a drugie to nazwa metody w home.ts. $event to znacznik że w środku będzie event, w tym wypadku to tylko false. Dodac w ohme.ts metode 
+cancelRegisterMode(registerMode: boolean), ktora bedzie zmieniala this.registerMode na registerMode przekazany z register.component. Mozna tez zauwazyc ze metoda registerToggle bedzie wywolana tylko raz
+i zmieni wartosc na true, wiec zeby nie dawac programowi szansy na dziwne błędy zmienmy !registerMode na true.
+
+Adding register method - otworzyc auth.service.ts, dodać metode register(model:any). Ona zwraca tylko http.post do "api/register" przekazujacy model. Całą resztą zajmie sie api i ef. Metoda ta zwroci jednak
+Observable, musimy wiec pamietac zeby ja zasubskrybować przy wywolaniu. W register.ts w konstruktorze dodajemy authService i w metodzie register() wywolujemy this.authService.register(this.model).subscribe
+(() => {console.log('registration successful!');}, error => {console.log(error);}). W wypadku sukcesu ( czyli (), to skrót (chyba) a i tak nie bedziemy korzystac z metody success) podac console.log o sukcesie,
+w wypadku error podobnie. Dodac przykladowego usera w stronie, sprawdzic czy dodal sie do bazy. Sprawdzic co sie stanie jesli dodamy drugi raz tego samego usera i jaki bedzie naglowek errora, sprawdzic co sie 
+stanie jesli ustawimy za krotkie haslo. Te bledy w nastepnej sekcji beda wyswietlane na stronie a nie w konsoli. Usunac z projektu czesc kodu do z wywolywaniem values w rejestracji (@Input).
+
+Error handling - 
