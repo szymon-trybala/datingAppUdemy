@@ -296,4 +296,46 @@ Observable, musimy wiec pamietac zeby ja zasubskrybować przy wywolaniu. W regis
 w wypadku error podobnie. Dodac przykladowego usera w stronie, sprawdzic czy dodal sie do bazy. Sprawdzic co sie stanie jesli dodamy drugi raz tego samego usera i jaki bedzie naglowek errora, sprawdzic co sie 
 stanie jesli ustawimy za krotkie haslo. Te bledy w nastepnej sekcji beda wyswietlane na stronie a nie w konsoli. Usunac z projektu czesc kodu do z wywolywaniem values w rejestracji (@Input).
 
-Error handling - 
+Error handling - żeby sprwadzic jak dziala zarzadzanie wyjatkami w asp .net core dodac na poczatku metody Login() throw new Exception("testowy wyjatek"). Teraz próbując dostac sie do api/auth/login w postmanie
+dostajemy 500 error z developer exception page, zawierającą wszystkie informacje o wyjątku. Próbując się zalogowac z poziomu angulara dostajemy 500 internal server error i failed to load login, no access-control
+-allow-origin. Dzieje sie tak bo api próbuje przesłać exception page, która nie zawiera cors http headera i w efekcie klient nie zezwala na dostęp (albo odwrotnie(?)). Nie da sie ich dodac, wiec zignorujmy drugi
+błąd. Exception page wyświetla sie bo jestesmy w trybie dewelopera, zmieniając w properties/launchSettings.json ASPNETCORE_ENVIRONMENT na Production i probujac sie zalogowac w postmanie dostajemy 500 internal error
+bez zadnych informacji. Jedyna mozliwosc na uzyskanie informacji o bledzie to terminal serwera. Dając całą metodę login w bloku try catch, gdzie przy catch zwracany jest StatusCode(500, "cośtam") w postmanie w body
+będzie wiadomość z "cośtam", jednak wkładanie całej funkcji do try catch nie jest dobrym pomysłem, dodamy wiec global exception handler.
+
+Global exception handler, api - w Startup.cs w metodzie Configure w else (czyli wtedy kiedy jestesmy w trybie produkcji) dać:
+ app.UseExceptionHandler(builder => {
+                    builder.Run(async context => {
+                        context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+
+                        var error = context.Features.Get<IExceptionHandlerFeature>();
+                        if(error != null)
+                        {
+                            await context.Response.WriteAsync(error.Error.Message);
+                        }
+                    });
+                });
+Ta część konfiguruje exception handler - każe mu wysyłać do klienta zawsze 500 InternalServerError (nawet jesli api ma zwracac inne errory, np unauthorized itd). Pozniej pobiera z wnętrza api error i jesli ten istnieje
+dołącza wiadomość dołączoną do errora do responsa, a na samym końcu wysyła response. Zmienić na production mode, wysłać request w postmanie, teraz dostajemy w body message. Jednak w angularze dalej widzimy te same błędy,
+bo dalej nie ma corsa. W głównym katalogu api tworzymy nowy folder Helpers, tworzymy statyczna klasę Extensions.cs. Tworzymy metode AddApplicationError(this HttpResponse, string message). W srodku dodajemy dodatkowe headery:
+            response.Headers.Add("Application-Error", message);
+            response.Headers.Add("Access-Control-Expose-Headers", "Application-Error");
+            response.Headers.Add("Access-Control-Allow-Origin", "*");
+
+))
+Po dodaniu tego extension do response będzie ono miało 3 headery, pierwszy to error, dwa kolejne to headery ctor które pozwalają na wyświetlanie tej odpowiedzi po stronie klienta. Teraz musimy dodac headery do response:
+przed wyslaniem dodajemy linijke context.Response.AddApplicationError(error.Error.Message); To wywoła statyczna funkcje ktora napisalismy chwile wczesniej. Sprawdzic czy dziala w postmanie, w headerach są nasze headery,
+w kliencie jest już błąd "Failed to login".
+
+Handling errors, angular - api musi byc caly czas w trybie production! Errory ktore dostajemy od api w konsoli wyswietlaja sie w calosci, a chcemy zeby przetwarzalo tylko messages. Tworzymy nową service error.intercepter.ts
+ustawiamy ją jako @Injectable, tworzymy klasę (export class) ErrorInterceptor implements HttpInterceptor. Implementujemy interfejs, wiec musimy stworzyc metode intercept(). Przyjmuje ona req: HttpReqiest<any>, next: HttpHandler)
+: Ovservable<HttpEvent><any>>. Po wywolaniu przechwytuje ona requesty i obsługuje je w skonfigurowany w kodzie sposob, szukajac bledow, czyli obiektow HttpErrorResponse. Pamietając że nasz header z errorem nazywa sie
+'Application-Error', szukamy wlasnie takiego headera, jesli ten istnieje wrzucamy go do konsoli i zwracamy throwError. Dodajemy jeszcze warunek że jeśli error.status jest 401, to wtedy zwracamy throwError(error.statusText), żeby
+przy 401 nie pokazywały się złe informacje. Musimy jeszcze stworzyc interceptor provider - ErrorInterceptorProvicer konfigurujący przechwytywanie requestow http. Dodajemy mu wlasciwosc privide: HTTP_INTERCEPTORS, ktora dodaje 
+nasz ErrorInterceptor do angularowej tablicy interceptorów, useClass: ErrorInterceptor mówiący jaką klasę dodajemy do tablicy, oraz multi:true zaznaczjacy ze nie chcemy zastapic poprzednich interceptorow tylko dodac nasz do poprzednich
+Teraz w app.module.ts dodajemy w providers ErrorInterceptorProvider i zapimportujemy ErrorInterceptorProvider. W nav.component.ts przy login error zamiast stringa przekazujemy po prostu error, ktory skorzysta z interceptora i sam 
+stworzy poprawną wiadomość na podstawie info z headera. Jednak kiedy sprobuemy sie zarejestrowac i podajemy zle dane, error w konsoli bedzie wygladal zle. Tworzymy wiec stałą serverErro biorącą zawartość response.error, a nie header,
+tworzymy pusty string z modalStateErrors. Jeśli serverError nie będzie nullem i jeśli jest typem object, to uruchamiamy pętlę która do pustego stringa dodaje dany error z pętli. W asp net core 2.2 zmieniono wewnetrzna klase error 
+i teraz error zawiera dodatkowe informacje, a same wiadomosci są w serverError.errors. Można dodać jeszcze else if dla starszej wersji, z for(const key in serverError) zamiast erverError.errors
+Na samym koncu funkcja robi throwError(modalStateErrors || serverError || "Server error"). Zwróci więc albo nasze sformatowane modelStateErrors, albo jesli te nie beda istniec czyste serverError, albo po prostu napis "Server Error" jeśli 
+nie znajdziemy nic
