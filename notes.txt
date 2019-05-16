@@ -338,4 +338,33 @@ stworzy poprawną wiadomość na podstawie info z headera. Jednak kiedy sprobuem
 tworzymy pusty string z modalStateErrors. Jeśli serverError nie będzie nullem i jeśli jest typem object, to uruchamiamy pętlę która do pustego stringa dodaje dany error z pętli. W asp net core 2.2 zmieniono wewnetrzna klase error 
 i teraz error zawiera dodatkowe informacje, a same wiadomosci są w serverError.errors. Można dodać jeszcze else if dla starszej wersji, z for(const key in serverError) zamiast erverError.errors
 Na samym koncu funkcja robi throwError(modalStateErrors || serverError || "Server error"). Zwróci więc albo nasze sformatowane modelStateErrors, albo jesli te nie beda istniec czyste serverError, albo po prostu napis "Server Error" jeśli 
-nie znajdziemy nic
+nie znajdziemy nic.
+
+Alertifyjs - npm install alertifyjs --save, potem w angular.json w scripts dodać ścieżkę do alerfify.min.js, a w styles.css dodać impoty do alertify.min.css i alertify/css/themes/bootstrap.min.css, żeby nasze okna były bootstrapowe. 
+Chcemy mieć możliwość dodawania alertów z alertify globalnie, z dowolnego miejsca aplikacji. Tworzymy więc alertify.service która będzie opakowywać kod wywoływania alertify w krótkie ładne metody. Dodajemy declare let alertify: any,
+czyli zmienną która będzie umożliwiać korzystanie z "domyślnych" metod, które zaimportowaliśmy w angular.json scripts. Dodać metode confirm(message: string, okCallback: () => any) { alertify.confirm(message, function(e)) 
+{if (e) { okCallback(); else {}}}}. Pierwsze to wiadomość w okienku, drugie to funkcja która ma się wywołać przy wybraniu "ok". Gdy ta 
+zostanie wywołana wywołujemy metodę alertify o nazwie confirm przekazujac jej wiadomosc i funkcje z parametrem e. e to event który może być dowolnego typu, tutaj jest to clickEvent. function(e) jest pustą funkcją która ma się tylko
+przekazać, a potem czekać na zmianę wewnątrz e. Zmianą jest kliknięcie które zmienia e na true albo false. Jesli zmieni sie na true, czyli user kliknie na przycisk "ok" wywołana zostanie funkcja wrzucana do naszej osobistej metody confirm.
+Dołozyć jeszcze metode success(message: string) {alertify.success(message)} i error, warning, message działające tak samo. Service jest gotowa, trzeba ją dodać do app.module providers. Teraz uzyjemy service - w nav.component.ts 
+dodac w konstuktorze alertify: AlertifyService, a w miejscach gdzie są console.log zamienić na this.alertify.[metoda] odpowiadajace wiadomosci. Podobnie w register.component (w error dać this.alertify.error(error)). Restart serwera, przetestować.
+
+Jwt library - npm install @auth0/angular-jwt@2.0.0. Obecnie sprawdzanie tokenu odbywa sie w nav.component. Chcemy zeby wszedzie mozna bylo sprawdzic token, wiec potrzebujemy uslugi. Mamy juz taką authentication.service, więc dokładamy do niej
+pole jwtHelper = new JwtHelperService i importujemy JwtHelperService. Tworzymy metode loggedIn() ktora najpierw pobiera token z dysku, a potem zwraca boolean !this.jwtHelper.isTokenExpired(token). Ta metoda sprawdza czy token istnieje i czy 
+jest poprawny, zwraca false tylko jesli wszystko jest ok. My chcemy miec odwrotnie, więc dajemy !. Przechodzimy do nav.component.ts i zmieniami zawartosc metody loggedIn na return this.authService.loggedIn(); Teraz token jest sprawdzany dokładniej.
+
+Zmiana "Welcome User" na "Welcome [nazwa]" - w auth.service tworzymy pole decodedToken: any i w metodzie login zaraz po zapisaniu tokenu wywolujemy znowu this.jwtHelper.decodeToken(user.token). Nazwę użytkownika możemy wyciągnąc z tokenu. W nav.html
+przy tekście welcome dodajemy {{authService.decodedToken.unique_name}}. auth_service będzie podkreślone, ale to kwestia tego że jest prywatne. Mimo wszystko po zalogowaniu teraz bedzie pokazywac imie. Jednak to działa tylko przy logowaniu, po 
+refreshu to nie bedzie dzialac, bo przypisywanie tokenu do decodedTokem bedzie sie odbywac tylko w metodzie login i unique_name nie bedzie istnieć. Dodając po decodedToken? znak zapytania error w konsoli zniknie, ale dalej nie bedzie pokazywac imienia.
+Zostaje jeszcze error przy authService, jest dlatego że w js nie ma podziału na prywatne i publiczne pola (a w ts jest taki podział) i nawet jeśli jest private to html może się do tego odwołać (!). Zamienić authService na public żeby się tego pozbyć.
+Z tym że username jest widoczny tylko przy logowaniu można sobie poradzić w prosty sposób, wywołując metodę odczytującą token na samym początku działania strony, czyli w app.component.ts. Ten komponent nie ma jednak onInit, trzeba zrobić class extends
+OnInit, dodać konstruktor przyjmujacy authService: AuthService) i metode ngOnInie() która pobierze token i jeśli ten istnieje wywoła authservice.decodedtoken = this.jwtHelper.decodeToken(token). Teraz powinno działac w kazdym wypadku. Na koncu zmienimy 
+nazwie pierwsza litere na wielka. W htmlu w {{ | titlecase}} dodajemy titlecase i html zrobi reszte.
+
+Ngx bootstrap i dropdown menu - npm install ngx-bootstrap@3.0.1 --save. Import - w app.module w imports dodajemy sekcje z instrukcji droptown (każdy komponent ma swój import) i import BsDropdownModule. Szukamy dropdown trigger by <a>, wchodzimy w 
+nav.html i szukamy klasy dropdown, dodajemy znacznik dropdown, w <a> niżej dodajemy dropdownToggle, a w dropdown-menu dodajemy *dropdownMenu. To znaczniki informujące ngxbootstrap że chcemy mieć w tych miejscach dropdownToggle. Teraz kosmetyka - wrzucamy 
+wszystko z nav.html w div class="containter" oprocz 1 i ostatniej linijki żeby zbliżyć wszystko do siebie. Dodajemy do class dropdown-menu mt-3 żeby pojawialo sie troche nizej, wchodzimy w nav.css i robimy .dropdown-toggle, dropdown-item{cursor: pointer}, usuwamy nav-item
+logout i dodajemy (click)="logout()" do dropdown-item logout, wczesniejsza wersja byla tymczasowo bo nie mielismy jak dostac sie do przycisku. Dodajemy jeszcze *ngIf("loggedIn()") w navbar-nav mr-auto, żeby nie pokazywac opcji typu matche, wiadomosci 
+niezalogowanym userom. 
+
+Bootswatch themes - npm install bootswatch, styles.css, import po bootstrap.min.css - dist/united/bootstrap.min.css. Zmienic w nav.component.html navbar navbar-expand-mds navbar-dark bg-dark ostatnie na bg-primary. Wrzucic na repo.
