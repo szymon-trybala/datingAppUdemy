@@ -368,3 +368,47 @@ logout i dodajemy (click)="logout()" do dropdown-item logout, wczesniejsza wersj
 niezalogowanym userom. 
 
 Bootswatch themes - npm install bootswatch, styles.css, import po bootstrap.min.css - dist/united/bootstrap.min.css. Zmienic w nav.component.html navbar navbar-expand-mds navbar-dark bg-dark ostatnie na bg-primary. Wrzucic na repo.
+
+Routing - stworzyc w src/app komponenty member-list, lists i messages, ktore beda odpowiadac kolejnym czesciom strony - przegladanie osob, pary i wiadomosci. Teraz w src/app dodajemy pusty plik routes.ts. Tworzymy export const appRoutes: Routes importowane z
+@angular/router. To jest tablica routes, która ustala do którego komponentu ma przekierowywać konkretny adres po localhost. Wewnątrz [] dodajemy { path: 'home', component: HomeComponent}. Path to adres, component to nazwa komponentu (trzeba zaimportować). W taki
+sam sposób dodać routing do lists, members i messages. Dodać jeszcze path '**', component: HomeComponent, pathMatch: 'full'. ** oznacza wszystkie adresy które nie są wcześniej opisanymi adresami. Dzieje sie tak bo router ma zasadę "pierwsze pasujące", czyli 
+szukając adresu leci od początku do końca listy appRoutes i gdyby ** było na początku nie brałoby pod uwagę reszty, czyli każdy adres przekierowałoby do home. Dodać router do app.module.ts, w tablicy imports dodac RouterModule.forRoot(appRoutes), czyli zasady 
+routowania które wcześniej skonfigurowaliśmy.
+
+Linki w navbarze używające routingu - w nav.component.html w linkach do matches, lists i messages zamiast usunac href i dodac info o routingu (snippet a-routerLink). W [routerLink] zmienić '/routePath' na '/lists' i tak dalej, drugie jest zwiazane z bootstrapem,
+po uzyciu snippetu widac ze klasa <li> została zmieniona na "nav-item active". Usuwamy active i kopiujemy do deklaracji <li> część z routerLinkActive i zmieniamy ="router-link-actice" na ="active". Zrobić tak z każdym z 3 linków, zrobic tez tak samo z napisem 
+DatingApp który będzie przekierowywać do /home. Po sprawdzeniu przekierowuje do podstron, ale html się nie zmienia. Dzieje sie dlatego ze mamy ustawione na sztywno app.component.html <app-home>. Trzeba zastąpić to czymś co będzie podmieniało go na html aktywnego 
+kopmonentu. Zmienić na <router-outlet>. Teraz wszystko działa. 
+
+Przekierowywanie do komponentow przy logowaniu i wylogowaniu - w nav.component.ts w konsturktorze dodać private router: Router. W metodzie login() dodać this.router.navigate(['/members']) w next  albo complete ( czyli () => { }); , pusty nawiast przy subscribe 
+to zawsze complete). Do metody logout dodac navigate(['/home']).
+
+Zabezpieczenie dostepu do komponentow dla niezalogowanych userów (routeguards) - w src/app dodać folder _guards. Nie mamy mozliwosci dodac wygenerowac guarda ppmem, ale mozna to zrobic z konsoli. cd do /_guards i wpisać ng g guard auth --spec=false. W pliku
+auth.guard.ts usunąć next i state. Usunąć możliwość zwracania Observable<boolean> albo Promise<boolean> (ps to jest unia (?)). Usunąć niepotrzebne importy. Dodać konsturktor z AuthService, Router i Alertify. W canActivate dać if(this.authService.loggedIn()) 
+{return true; else this.alertify.error('U shall not pas'); this.router.navigate(['/home']); return false; } Gdy user bedzie zalogowany zwrocic true, gdy nie wyswietlic wiadomosc i przekierowac do strony glownej. Dodac info o guard w app.module providers (AuthGuard)
+i włączyć używanie guarda w routes.ts. Testowo w części z members dodać , canActivate: [AuthGuard]. Sprawdzic czy niezalogowany i zalogowany user moze dostac sie do members.
+
+Guard do wielu komponentow naraz - w routes.ts dodamy "dummy route" czyli pusty pojemnik na inne routes. Po home dodać { path: '', runGuardsAndResolvers: 'always', canActivate: [AuthGuard], children: [tu wkleic konfigi routingu 3 komponentow]}. Usunąć canActivate z 
+members, był tylko testowo. Teraz możemy użyć jednej konfiguracji do wielu komponentow, dodajac kolejne tylko do children. path '' jest dlatego ze jest wymagana a jesli jest children to path rodzica i children sumuja sie, czyli gdyby bylo 'a' a children 'lists' to
+link do lists byłby 'alists'. Dając pusty string zapobiegamy temu i mozemy uzywac czystych nazw komponentow. Problemem jest jednak to że po zalogowaniu sie i wyjsciu z zakladki i wejsciu z powrotem do czystego localhost:4200 aplikacja nie wie gdzie przekierowac 
+i pokazuje pustą stronę. Klikając w link wyskakuje bład "Outlet is not activated". Dzieje sie dlatego że nie mamy ustawionego routingu do strony głównej. Musimy więc zamienić w routes.ts wszystkie redirectTo: 'home' na ''. Teraz pusta strona będzie działać, sprawdzić.
+
+Rozszerzanie modelu usera w api - robimy apke randkową więc potrzebujemy więcej pól w klasie User - dodajemy string Gender, DateTime DateOfBirth, string KnownAs, DateTime Created, DateTime LastActive, string Introduction, string LookingFor, string Interest, string City,
+string Country, ICollection<Photo> Photos. To ostatnie ma byc osobna tabela zdjęć powiązanych z userem, trzeba stworzyc osobno klase Photo. Pola: int Id, string Url, string Description, DateTime DateAdded, bool IsMain. Musimy jeszcze dodac do DataContext.cs informacje
+że chcemy tez wrzucic do bazy danych obiekty Photo, dodajemy public DbSet<Photo> Photos {get; set;}. Tworzymy nową migrację, NIE ROBIMY DATABASE UPDATE. W pliku migracji widzimy że wewnatrz nowej tabeli Photos jest dodatkowe pole UserId - sql'owy łącznik pomiedzy dwoma 
+tabelami. Niżej w ustawieniach tej tabeli widzimy pole onDelete: ReferentialAction.Restrict); Dzięki temu gdy usuniemy usera tabela photos nalezaca do tego usera zostanie, a UserId w niej zostanie zmienione na null. Nie chcemy tego robic, chcemy zeby zdjecia usera 
+byly usuwane razem z userem. Cofamy więc migrację.
+
+Potencjalne problemy z migracjami - gdy zaaplikuje sie migracje a potem chce sie ja cofnac powinno sie uzywac dotnet ef database update [nazwa_wczesniejszej_migracji] (bez daty). Jednak kiedy uzywamy sqlite okazuje sie ze metoda down z migracji nie moze zostac wykonana 
+bo sqlite nie obsluguje dropColumn. Najlepszym sposobem w tym momencie jest zrobienie database drop, czyli usuniecie calej bazy, usuniecie ostatniej migracji i zrobienie database update. 
+
+Relacje pomiedzy klasami w tabeli - najprostsza metoda zeby ef usuwał zdjęcia razem z userem to po prostu dodanie propa User User i int UserId. Dzięki temu ef nie doda ich automatycznie i rozpozna że jedno musi byc powiazane z drugim i w przypadku usniecia usunie kaskadowo,
+czyli usunie usera i photos. Zrobić database update.
+
+Generowanie danych do bazy - uzyc json-generator.com i snippetu z .txt z kursu. Pierwsza porcja ma mieć username female i gender female, password: 'password'. W folderze Data stworzyc UserSeedData.json, skopiowac wygenerowany tekst. Zmienic w configu username male i gender
+na male, wygenerowac i skopiowac znowu, poprawic nawiasy zeby json byl poprawny. W Data stworzyc klase Seed.cs z konstruktorem DataContext context żeby móc wrzucic pliki z jsona do bazy danych, zrobic metode SeedUsers(), w srodku stworzyc pole userData = System.IO.File.
+.ReadAlltext("Data/UserSeedData.json"). To skopiuje zawartosc jsona do zmiennej. Teraz musimy to zserializowac do obiektow User - stworzyc pole users = JsonConvert.DeserializeObjects<List<User>>(userData); teraz users to lista zdeserializowanych obiektow User.
+teraz kazdemu z nich musimy nadac poprawne hasło. Stworzyc foreacha in users, w nim byte[] passwordHash, passwordSalt i wywolanie metody CreatePasswordHash("password") (każde hasło to będzie password), potem user.PasswordHash = passwordHash, passwordSalt tak samo, zmienic
+username na ToLower(). Metode CreatePasswordHash skopiowac z AuthRepository zeby nie dodawac sobie roboty, seed to i tak bedzie wywolany raz. Na koncu loopa zrobic _context.Users.Add(user), a poza loopem _context.SaveChanges(). Teraz dodac info o Seed do Startup.cs -
+w ConfigureServices dodac services.AddTransient(Seed), w konstruktorze Configure dodac Seed seeder, i w metodzie zaraz przed UseCors wywolac seeder.SeedUsers(). Upewnic sie ze baza danych jest pusta (zeby nie mieszac z id), zrobic dotnet run, zakomentowac seeder.SeedUsers().
+Sprawdzić bazę DB Browserem. 
