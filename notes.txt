@@ -180,7 +180,7 @@ username jest teraz nullem i konwersja na lowercase wywala wyjątek (można spra
 Bez ApiController trzeba zrobic walidacje (if (!modelState.IsValid) return BadRequest(ModelState);), wtedy dostaniemy juz bad request 400. Jednak najlepszą opcją
 jest dodanie ApiController i usuniecie FromBody i walidacji przez ModelState.
 
-Token authentication - zawiera 3 części - header z ingo o rodzaju szyfrowania i typie struktury (JWT, json web token), payload, czyli czesc przechowujaca informacje
+Token authentication - zawiera 3 części - header z info o rodzaju szyfrowania i typie struktury (JWT, json web token), payload, czyli czesc przechowujaca informacje
 np id, name. oprocz tego zawiera info tokenu, czyli date wygenerowania, date wygasniecia i date wejscia do uzycia. Te dwie czesci moga byc odczytane przez kazdego!
 Ostatnia czesc to signature, czyli czesc ktora autoryzuje token. Tworzy sie go szyfrujac header i payload tokenu przy uzyciu sekretu jako soli (?). Sekret
 jest trzymany na serwerze. Logowanie bedzie dzialalo tak że klient wysyla login i haslo, serwer odsyla token ktory klient zapisuje, a do kazdego kolejnego żądania 
